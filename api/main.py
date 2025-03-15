@@ -13,8 +13,8 @@ from fastapi.responses import JSONResponse
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入应用程序组件
-from app.routes import astro_routes, test_routes
-from app.utils import setup_logging
+from api.app.routes import astro_routes, test_routes, root_routes, calendar_routes
+from api.app.utils import setup_logging
 
 # 配置日志
 logger = setup_logging()
@@ -45,12 +45,16 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"status": "error", "message": f"服务器内部错误: {str(exc)}"}
     )
 
+# 添加根路由
+app.include_router(root_routes.router)
+
 # 创建总的API路由器，添加/api前缀
 api_router = APIRouter(prefix="/api")
 
 # 将子路由器添加到API路由器
 api_router.include_router(astro_routes.router)
 api_router.include_router(test_routes.router)
+api_router.include_router(calendar_routes.router, prefix="/calendar")
 
 # 将API路由器添加到应用
 app.include_router(api_router)
