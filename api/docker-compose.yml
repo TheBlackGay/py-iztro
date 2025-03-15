@@ -1,15 +1,21 @@
-version: '3'
+version: '3.8'
 
 services:
-  api:
+  ziwei-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: purple_star_api
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - ./logs:/app/logs
     restart: unless-stopped
     environment:
-      - PYTHONPATH=/app 
+      - PYTHONUNBUFFERED=1
+      # 如果需要可以添加其他环境变量
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/test"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s 
