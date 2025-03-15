@@ -60,13 +60,14 @@ class AstroService:
             logger.error(f"处理本命盘结果失败: {str(e)}")
             return None, str(e)
 
-    def get_horoscope(self, natal_chart: Dict[str, Any], target_date: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def get_horoscope(self, natal_chart: Dict[str, Any], target_date: str,target_time_index: int) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
         获取大限流年
 
         Args:
             natal_chart: 本命盘数据
             target_date: 目标日期，格式为YYYY-MM-DD或YYYY-M-D
+            target_time_index: 目标时间，0~12
 
         Returns:
             (horoscope, error): 大限流年数据和可能的错误信息
@@ -83,34 +84,34 @@ class AstroService:
             solar_date = natal_chart.get("solarDate")
             time_index = natal_chart.get("time")
             gender = natal_chart.get("gender")
-            
+
             if not all([solar_date, time_index is not None, gender]):
                 logger.error("本命盘数据缺少必要参数")
                 return None, "本命盘数据缺少必要参数"
 
             # 完全模仿daxian.py的调用方式，不使用safe_execute
             logger.info(f"使用直接方式计算大限流年: 完全按照daxian.py的方式调用")
-            
+
             try:
                 # 直接创建Astro对象
                 from py_iztro import Astro
                 astro = Astro()
-                
+
                 # 将time_index从字符串转换为整数
                 if isinstance(time_index, str):
-                    time_map = {"子时": 0, "丑时": 1, "寅时": 2, "卯时": 3, "辰时": 4, 
-                                "巳时": 5, "午时": 6, "未时": 7, "申时": 8, "酉时": 9, 
+                    time_map = {"子时": 0, "丑时": 1, "寅时": 2, "卯时": 3, "辰时": 4,
+                                "巳时": 5, "午时": 6, "未时": 7, "申时": 8, "酉时": 9,
                                 "戌时": 10, "亥时": 11, "夜子时": 12}
                     time_index = time_map.get(time_index, 0)
-                
+
                 # 直接调用，完全按照daxian.py的方式
                 natal_obj = astro.by_solar(solar_date, time_index, gender)
                 horoscope_data = natal_obj.horoscope(target_date, 0)
-                
+
                 # 处理结果
                 result = handle_result(horoscope_data)
                 return result, None
-                
+
             except Exception as e:
                 logger.error(f"直接调用方式失败: {str(e)}")
                 return self._generate_mock_horoscope(natal_chart, target_date, f"直接调用方式失败: {str(e)}")
@@ -146,7 +147,7 @@ class AstroService:
         return mock_data, error_message
 
     def get_complete_horoscope(self, solar_date: str, time_index: int, gender: str,
-                              target_date: str, fix_leap: bool = True,
+                              target_date: str,target_time_index:int, fix_leap: bool = True,
                               language: str = "zh-CN") -> Dict[str, Any]:
         """
         获取完整的星盘和大限流年数据
@@ -156,6 +157,7 @@ class AstroService:
             time_index: 出生时辰序号，0-12
             gender: 性别，"男"或"女"
             target_date: 目标日期，格式为YYYY-MM-DD或YYYY-M-D
+            target_time_index: 目标时间
             fix_leap: 是否调整闰月情况
             language: 输出语言
 
@@ -177,7 +179,7 @@ class AstroService:
             }
 
         # 获取大限流年
-        horoscope_data, horoscope_error = self.get_horoscope(natal_chart, target_date)
+        horoscope_data, horoscope_error = self.get_horoscope(natal_chart, target_date, target_time_index)
 
         if horoscope_error:
             # 如果大限流年计算失败，但本命盘成功，返回部分成功响应

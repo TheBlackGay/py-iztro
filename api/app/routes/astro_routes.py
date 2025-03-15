@@ -67,15 +67,15 @@ def calculate_by_solar_get(
     """通过阳历获取星盘信息"""
     try:
         logger.info(f"接收到GET请求: 日期={solar_date}, 时辰={time_index}, 性别={gender}")
-        
+
         # 获取本命盘
         natal_chart, error = astro_service.get_natal_chart(
             solar_date, time_index, gender, fix_leap, language
         )
-        
+
         if error:
             return create_error_response(error)
-        
+
         return create_success_response(natal_chart)
     except Exception as e:
         logger.error(f"处理请求时出错: {str(e)}")
@@ -90,19 +90,19 @@ def calculate_by_solar(
     """通过阳历获取星盘信息"""
     try:
         logger.info(f"接收到POST请求: {request.model_dump()}")
-        
+
         # 获取本命盘
         natal_chart, error = astro_service.get_natal_chart(
-            request.solar_date, 
-            request.time_index, 
-            request.gender, 
-            request.fix_leap, 
+            request.solar_date,
+            request.time_index,
+            request.gender,
+            request.fix_leap,
             request.language
         )
-        
+
         if error:
             return create_error_response(error)
-        
+
         return create_success_response(natal_chart)
     except Exception as e:
         logger.error(f"处理请求时出错: {str(e)}")
@@ -115,6 +115,7 @@ def calculate_horoscope_get(
     time_index: TimeIndexType = Query(..., description="出生时辰序号：0-12，0为早子时，1为丑时，依此类推"),
     gender: GenderType = Query(..., description="性别：男/女"),
     target_date: str = Query(..., description="目标日期，格式：YYYY-MM-DD"),
+    target_time_index: int = Query(..., description="目标时辰序号：0-12，0为早子时，1为丑时，依此类推"),
     fix_leap: bool = Query(True, description="是否调整闰月情况"),
     language: LangueType = Query("zh-CN", description="输出语言"),
     astro_service: AstroService = Depends(get_astro_service)
@@ -122,12 +123,12 @@ def calculate_horoscope_get(
     """通过阳历获取大限流年信息"""
     try:
         logger.info(f"接收到大限流年GET请求: 日期={solar_date}, 时辰={time_index}, 性别={gender}, 目标日期={target_date}")
-        
+
         # 获取完整大限流年数据
         result = astro_service.get_complete_horoscope(
-            solar_date, time_index, gender, target_date, fix_leap, language
+            solar_date, time_index, gender, target_date,target_time_index, fix_leap, language
         )
-        
+
         if result["status"] == "error":
             return create_error_response(result["message"], result["error"])
         elif result["status"] == "partial":
@@ -154,17 +155,18 @@ def calculate_horoscope_post(
     """通过阳历获取大限流年信息"""
     try:
         logger.info(f"接收到大限流年POST请求: {request.model_dump()}")
-        
+
         # 获取完整大限流年数据
         result = astro_service.get_complete_horoscope(
-            request.solar_date, 
-            request.time_index, 
-            request.gender, 
-            request.target_date, 
-            request.fix_leap, 
+            request.solar_date,
+            request.time_index,
+            request.gender,
+            request.target_date,
+            request.target_time_index,
+            request.fix_leap,
             request.language
         )
-        
+
         if result["status"] == "error":
             return create_error_response(result["message"], result["error"])
         elif result["status"] == "partial":
@@ -180,4 +182,4 @@ def calculate_horoscope_post(
             )
     except Exception as e:
         logger.error(f"处理大限流年请求时出错: {str(e)}")
-        return create_error_response(f"大限流年计算失败: {str(e)}") 
+        return create_error_response(f"大限流年计算失败: {str(e)}")
