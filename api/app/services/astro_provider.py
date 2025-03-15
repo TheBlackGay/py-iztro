@@ -92,5 +92,5 @@ class AstroProvider:
             logger.info("成功导入py_iztro库")
             return Astro(), True
         except ImportError:
-            logger.warning("无法导入py_iztro库，将使用模拟数据引擎")
+            logger.info("无法导入py_iztro库，将使用模拟数据引擎")
             return MockAstroEngine(), False

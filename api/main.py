@@ -1,23 +1,75 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """
 紫微斗数API服务主入口文件
 """
 import logging
 import os
 import sys
+import traceback
+import subprocess
 import uvicorn
 from fastapi import FastAPI, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# 确保可以导入app包
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# 导入应用程序组件
-from api.app.routes import astro_routes, test_routes, root_routes, calendar_routes
-from api.app.utils import setup_logging
-
 # 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("紫微斗数API")
+
+# 确保可以导入app包
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+def check_dependencies():
+    """检查依赖项"""
+    try:
+        # 尝试导入关键依赖
+        import fastapi
+        import uvicorn
+        import pydantic
+        
+        # 尝试导入py_iztro（可选）
+        try:
+            import py_iztro
+            logger.info(f"检测到py_iztro库，版本: {getattr(py_iztro, '__version__', '未知')}")
+        except ImportError:
+            logger.warning("未检测到py_iztro库，将使用模拟数据模式运行")
+            
+        return True
+    except ImportError as e:
+        logger.warning(f"缺少关键依赖: {str(e)}")
+        return False
+    
+def install_requirements():
+    """安装依赖项"""
+    logger.info("正在安装依赖项...")
+    requirements_file = os.path.join(current_dir, "requirements.txt")
+    
+    if not os.path.exists(requirements_file):
+        logger.error(f"未找到依赖文件: {requirements_file}")
+        return False
+    
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
+        logger.info("依赖项安装成功")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"安装依赖项失败: {str(e)}")
+        return False
+
+# 导入应用程序组件 - 在检查依赖后再导入
+from api.app.utils import setup_logging
+# 使用我们自己的日志配置
 logger = setup_logging()
+
+# 导入路由组件
+from api.app.routes import astro_routes, test_routes, root_routes, calendar_routes
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -71,12 +123,30 @@ async def shutdown_event():
     """应用关闭时的事件处理"""
     logger.info("紫微斗数API服务关闭")
 
-# 主入口
-if __name__ == "__main__":
+def main():
+    """
+    API服务主入口函数
+    用于启动紫微斗数API服务
+    """
     try:
+        # 检查并安装依赖
+        if not check_dependencies():
+            logger.info("尝试安装依赖...")
+            if install_requirements():
+                logger.info("依赖安装成功")
+                if not check_dependencies():
+                    logger.warning("依赖检查失败，但将尝试继续运行")
+            else:
+                logger.warning("依赖安装失败，但将尝试继续运行")
+                
         # 启动服务
         logger.info("正在启动紫微斗数API服务...")
-        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
     except Exception as e:
         logger.error(f"服务启动失败: {e}", exc_info=True)
+        logger.error(traceback.format_exc())
         sys.exit(1)
+
+# 主入口
+if __name__ == "__main__":
+    main()
