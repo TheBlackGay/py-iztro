@@ -22,7 +22,8 @@ class HoroscopeRequest(BaseModel):
     """大限流年请求模型"""
     solar_date: str
     time_index: TimeIndexType
+    target_time_index: TimeIndexType
     gender: GenderType
     target_date: str
     fix_leap: bool = True
-    language: LangueType = "zh-CN" 
+    language: LangueType = "zh-CN"

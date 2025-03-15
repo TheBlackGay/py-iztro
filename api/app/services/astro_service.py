@@ -85,7 +85,7 @@ class AstroService:
             time_index = natal_chart.get("time")
             gender = natal_chart.get("gender")
 
-            if not all([solar_date, time_index is not None, gender]):
+            if not all([solar_date, target_time_index,time_index is not None, gender]):
                 logger.error("本命盘数据缺少必要参数")
                 return None, "本命盘数据缺少必要参数"
 
@@ -106,7 +106,7 @@ class AstroService:
 
                 # 直接调用，完全按照daxian.py的方式
                 natal_obj = astro.by_solar(solar_date, time_index, gender)
-                horoscope_data = natal_obj.horoscope(target_date, 0)
+                horoscope_data = natal_obj.horoscope(target_date, target_time_index)
 
                 # 处理结果
                 result = handle_result(horoscope_data)
