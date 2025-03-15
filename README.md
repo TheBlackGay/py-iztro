@@ -108,6 +108,7 @@ docker-compose up -d
 - time_index: 出生时辰序号，0-12
 - gender: 性别，"男"或"女"
 - target_date: 目标日期，格式：YYYY-M-D
+- target_time_index: 目标时辰序号，0-12
 - fix_leap: 是否调整闰月，默认为true
 - language: 输出语言，默认为"zh-CN"
 
