@@ -25,6 +25,7 @@ logger = logging.getLogger("紫微斗数API")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+sys.path.append(current_dir)  # 添加当前目录到路径中
 
 def check_dependencies():
     """检查依赖项"""
@@ -64,12 +65,12 @@ def install_requirements():
         return False
 
 # 导入应用程序组件 - 在检查依赖后再导入
-from api.app.utils import setup_logging
+from app.utils import setup_logging
 # 使用我们自己的日志配置
 logger = setup_logging()
 
 # 导入路由组件
-from api.app.routes import astro_routes, test_routes, root_routes, calendar_routes
+from app.routes import astro_routes, test_routes, root_routes, calendar_routes
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -141,7 +142,7 @@ def main():
                 
         # 启动服务
         logger.info("正在启动紫微斗数API服务...")
-        uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
     except Exception as e:
         logger.error(f"服务启动失败: {e}", exc_info=True)
         logger.error(traceback.format_exc())
