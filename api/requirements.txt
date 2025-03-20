@@ -3,4 +3,5 @@ uvicorn==0.27.1
 pydantic==2.6.1
 python-multipart==0.0.7
 loguru==0.7.2
-email-validator==2.1.0 
+email-validator==2.1.0
+pymysql==1.1.0 

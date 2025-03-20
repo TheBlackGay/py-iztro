@@ -8,7 +8,7 @@ from datetime import datetime
 
 from ..models import SolarRequest, HoroscopeRequest, APIResponse
 from ..models import GenderType, LangueType, TimeIndexType
-from ..services import AstroService
+from ..services import AstroService, DBService
 
 # 获取日志记录器
 logger = logging.getLogger("紫微斗数API")
@@ -20,6 +20,11 @@ router = APIRouter(prefix="/astro", tags=["astro"])
 def get_astro_service():
     """提供紫微斗数服务实例"""
     return AstroService()
+
+# 依赖注入：获取数据库服务
+def get_db_service():
+    """提供数据库服务实例"""
+    return DBService()
 
 # 创建错误响应
 def create_error_response(error_message: str, error_detail: str = None):
@@ -62,7 +67,8 @@ def calculate_by_solar_get(
     gender: GenderType = Query(..., description="性别：男/女"),
     fix_leap: bool = Query(True, description="是否调整闰月情况"),
     language: LangueType = Query("zh-CN", description="输出语言"),
-    astro_service: AstroService = Depends(get_astro_service)
+    astro_service: AstroService = Depends(get_astro_service),
+    db_service: DBService = Depends(get_db_service)
 ):
     """通过阳历获取星盘信息"""
     try:
@@ -76,7 +82,71 @@ def calculate_by_solar_get(
         if error:
             return create_error_response(error)
 
-        return create_success_response(natal_chart)
+        # 自动保存到数据库
+        try:
+            # 先检查是否已存在相同的命盘数据
+            existing_id = db_service.check_astro_data_exists(
+                solar_date,
+                time_index,
+                gender
+            )
+            
+            if existing_id:
+                # 数据已存在，直接更新并返回
+                logger.info(f"命盘数据已存在，ID: {existing_id}，将更新已有记录")
+                
+                try:
+                    db_service.update_astro_data(
+                        existing_id, 
+                        {
+                            'astro_data': natal_chart,
+                            'fix_leap': fix_leap,
+                            'language': language
+                        }, 
+                        update_user="system"
+                    )
+                    logger.info(f"已更新现有命盘数据，ID: {existing_id}")
+                except Exception as update_err:
+                    logger.warning(f"更新现有命盘数据失败: {str(update_err)}")
+                
+                # 在结果中添加数据库ID
+                natal_chart["db_id"] = existing_id
+                return create_success_response(natal_chart, "命盘计算成功 (数据已存在)")
+            
+            # 如果不存在则正常保存
+            new_id = db_service.save_astro_data(
+                solar_date,
+                time_index,
+                gender,
+                natal_chart,
+                fix_leap,
+                language,
+                "system"  # 默认创建用户为system
+            )
+            logger.info(f"命盘数据已保存到数据库，ID: {new_id}")
+            
+            # 在结果中添加数据库ID
+            natal_chart["db_id"] = new_id
+        except Exception as e:
+            logger.error(f"保存命盘数据到数据库失败: {str(e)}")
+            # 尝试从错误消息中提取可能的ID
+            if "Duplicate entry" in str(e) and "uniq_data" in str(e):
+                try:
+                    # 重新查询ID
+                    retry_id = db_service.check_astro_data_exists(
+                        solar_date,
+                        time_index,
+                        gender
+                    )
+                    if retry_id:
+                        logger.info(f"检测到重复数据，找到已存在的ID: {retry_id}")
+                        natal_chart["db_id"] = retry_id
+                        return create_success_response(natal_chart, "命盘计算成功 (数据已存在)")
+                except Exception:
+                    pass
+            # 即使保存失败，我们仍然返回命盘数据
+
+        return create_success_response(natal_chart, "命盘计算成功")
     except Exception as e:
         logger.error(f"处理请求时出错: {str(e)}")
         return create_error_response(str(e))
@@ -85,7 +155,8 @@ def calculate_by_solar_get(
 @router.post("/by_solar")
 def calculate_by_solar(
     request: SolarRequest,
-    astro_service: AstroService = Depends(get_astro_service)
+    astro_service: AstroService = Depends(get_astro_service),
+    db_service: DBService = Depends(get_db_service)
 ):
     """通过阳历获取星盘信息"""
     try:
@@ -103,7 +174,71 @@ def calculate_by_solar(
         if error:
             return create_error_response(error)
 
-        return create_success_response(natal_chart)
+        # 自动保存到数据库
+        try:
+            # 先检查是否已存在相同的命盘数据
+            existing_id = db_service.check_astro_data_exists(
+                request.solar_date,
+                request.time_index,
+                request.gender
+            )
+            
+            if existing_id:
+                # 数据已存在，直接更新并返回
+                logger.info(f"命盘数据已存在，ID: {existing_id}，将更新已有记录")
+                
+                try:
+                    db_service.update_astro_data(
+                        existing_id, 
+                        {
+                            'astro_data': natal_chart,
+                            'fix_leap': request.fix_leap,
+                            'language': request.language
+                        }, 
+                        update_user="system"
+                    )
+                    logger.info(f"已更新现有命盘数据，ID: {existing_id}")
+                except Exception as update_err:
+                    logger.warning(f"更新现有命盘数据失败: {str(update_err)}")
+                
+                # 在结果中添加数据库ID
+                natal_chart["db_id"] = existing_id
+                return create_success_response(natal_chart, "命盘计算成功 (数据已存在)")
+            
+            # 如果不存在则正常保存
+            new_id = db_service.save_astro_data(
+                request.solar_date,
+                request.time_index,
+                request.gender,
+                natal_chart,
+                request.fix_leap,
+                request.language,
+                "system"  # 默认创建用户为system
+            )
+            logger.info(f"命盘数据已保存到数据库，ID: {new_id}")
+            
+            # 在结果中添加数据库ID
+            natal_chart["db_id"] = new_id
+        except Exception as e:
+            logger.error(f"保存命盘数据到数据库失败: {str(e)}")
+            # 尝试从错误消息中提取可能的ID
+            if "Duplicate entry" in str(e) and "uniq_data" in str(e):
+                try:
+                    # 重新查询ID
+                    retry_id = db_service.check_astro_data_exists(
+                        request.solar_date,
+                        request.time_index,
+                        request.gender
+                    )
+                    if retry_id:
+                        logger.info(f"检测到重复数据，找到已存在的ID: {retry_id}")
+                        natal_chart["db_id"] = retry_id
+                        return create_success_response(natal_chart, "命盘计算成功 (数据已存在)")
+                except Exception:
+                    pass
+            # 即使保存失败，我们仍然返回命盘数据
+
+        return create_success_response(natal_chart, "命盘计算成功")
     except Exception as e:
         logger.error(f"处理请求时出错: {str(e)}")
         return create_error_response(str(e))
