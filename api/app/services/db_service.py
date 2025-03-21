@@ -222,4 +222,201 @@ class DBService:
             raise e
         finally:
             if conn:
+                conn.close()
+                
+    # 添加大限数据相关方法
+    def check_horoscope_data_exists(self, solar_date: str, time_index: int, gender: str, 
+                                  target_date: str, target_time_index: int) -> Optional[int]:
+        """
+        检查大限数据是否已存在
+        
+        Args:
+            solar_date: 阳历日期，格式为YYYY-MM-DD
+            time_index: 出生时辰序号
+            gender: 性别
+            target_date: 目标日期，格式为YYYY-MM-DD
+            target_time_index: 目标时辰序号
+            
+        Returns:
+            存在则返回记录ID，不存在则返回None
+        """
+        # 格式化日期为yyyyMMdd
+        formatted_birth_date = solar_date.replace('-', '')
+        formatted_target_date = target_date.replace('-', '')
+        
+        conn = None
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                sql = """
+                SELECT id FROM iztro_astro_horoscope 
+                WHERE solar_date = %s AND time_index = %s AND gender = %s 
+                AND target_date = %s AND target_time_index = %s
+                LIMIT 1
+                """
+                cursor.execute(sql, (
+                    formatted_birth_date, 
+                    time_index, 
+                    gender, 
+                    formatted_target_date, 
+                    target_time_index
+                ))
+                result = cursor.fetchone()
+                
+                if result:
+                    return result[0]  # 返回ID
+                return None
+        except Exception as e:
+            logger.error(f"检查大限数据是否存在失败: {str(e)}")
+            return None
+        finally:
+            if conn:
+                conn.close()
+    
+    def save_horoscope_data(self, solar_date: str, time_index: int, gender: str,
+                          target_date: str, target_time_index: int, horoscope_data: Dict[str, Any],
+                          create_user: str = "system") -> int:
+        """
+        保存大限数据到数据库
+        
+        Args:
+            solar_date: 阳历日期，格式为YYYY-MM-DD
+            time_index: 出生时辰序号
+            gender: 性别
+            target_date: 目标日期，格式为YYYY-MM-DD
+            target_time_index: 目标时辰序号
+            horoscope_data: 大限数据
+            create_user: 创建用户
+            
+        Returns:
+            新增记录的ID或已存在记录的ID
+        """
+        # 先检查是否已存在相同的大限数据
+        existing_id = self.check_horoscope_data_exists(solar_date, time_index, gender, target_date, target_time_index)
+        if existing_id:
+            logger.info(f"大限数据已存在，ID: {existing_id}，不再重复插入")
+            # 可选：更新已有记录的数据
+            try:
+                self.update_horoscope_data(
+                    existing_id, 
+                    {
+                        'horoscope_data': horoscope_data
+                    }, 
+                    update_user=create_user
+                )
+                logger.info(f"已更新现有大限数据，ID: {existing_id}")
+            except Exception as e:
+                logger.warning(f"更新现有大限数据失败: {str(e)}")
+            
+            return existing_id
+            
+        # 格式化日期为yyyyMMdd
+        formatted_birth_date = solar_date.replace('-', '')
+        formatted_target_date = target_date.replace('-', '')
+        
+        conn = None
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                # 转换大限数据为JSON字符串
+                horoscope_json = json.dumps(horoscope_data, ensure_ascii=False)
+                
+                sql = """
+                INSERT INTO iztro_astro_horoscope 
+                (solar_date, time_index, gender, target_date, target_time_index, horoscope, create_user, update_user) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(sql, (
+                    formatted_birth_date, 
+                    time_index, 
+                    gender, 
+                    formatted_target_date, 
+                    target_time_index, 
+                    horoscope_json, 
+                    create_user, 
+                    create_user
+                ))
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            logger.error(f"保存大限数据失败: {str(e)}")
+            if conn:
+                conn.rollback()
+            raise e
+        finally:
+            if conn:
+                conn.close()
+                
+    def update_horoscope_data(self, horoscope_id: int, update_data: Dict[str, Any], update_user: str = "system") -> bool:
+        """
+        更新大限数据
+        
+        Args:
+            horoscope_id: 大限数据ID
+            update_data: 要更新的数据
+            update_user: 更新用户
+            
+        Returns:
+            是否更新成功
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            
+            # 构建更新字段
+            update_fields = []
+            params = []
+            
+            if 'solar_date' in update_data:
+                update_fields.append("solar_date = %s")
+                params.append(update_data['solar_date'].replace('-', ''))
+                
+            if 'time_index' in update_data:
+                update_fields.append("time_index = %s")
+                params.append(update_data['time_index'])
+                
+            if 'gender' in update_data:
+                update_fields.append("gender = %s")
+                params.append(update_data['gender'])
+                
+            if 'target_date' in update_data:
+                update_fields.append("target_date = %s")
+                params.append(update_data['target_date'].replace('-', ''))
+                
+            if 'target_time_index' in update_data:
+                update_fields.append("target_time_index = %s")
+                params.append(update_data['target_time_index'])
+                
+            if 'horoscope_data' in update_data:
+                update_fields.append("horoscope = %s")
+                horoscope_json = json.dumps(update_data['horoscope_data'], ensure_ascii=False)
+                params.append(horoscope_json)
+                
+            # 添加更新用户
+            update_fields.append("update_user = %s")
+            params.append(update_user)
+            
+            if not update_fields:
+                logger.warning("没有要更新的字段")
+                return False
+                
+            # 执行更新
+            with conn.cursor() as cursor:
+                sql = f"""
+                UPDATE iztro_astro_horoscope 
+                SET {', '.join(update_fields)} 
+                WHERE id = %s
+                """
+                params.append(horoscope_id)
+                affected_rows = cursor.execute(sql, params)
+                conn.commit()
+                
+                return affected_rows > 0
+        except Exception as e:
+            logger.error(f"更新大限数据失败: {str(e)}")
+            if conn:
+                conn.rollback()
+            raise e
+        finally:
+            if conn:
                 conn.close() 

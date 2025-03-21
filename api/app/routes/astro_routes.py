@@ -253,7 +253,8 @@ def calculate_horoscope_get(
     target_time_index: int = Query(..., description="目标时辰序号：0-12，0为早子时，1为丑时，依此类推"),
     fix_leap: bool = Query(True, description="是否调整闰月情况"),
     language: LangueType = Query("zh-CN", description="输出语言"),
-    astro_service: AstroService = Depends(get_astro_service)
+    astro_service: AstroService = Depends(get_astro_service),
+    db_service: DBService = Depends(get_db_service)
 ):
     """通过阳历获取大限流年信息"""
     try:
@@ -261,12 +262,89 @@ def calculate_horoscope_get(
 
         # 获取完整大限流年数据
         result = astro_service.get_complete_horoscope(
-            solar_date, time_index, gender, target_date,target_time_index, fix_leap, language
+            solar_date, time_index, gender, target_date, target_time_index, fix_leap, language
         )
 
         if result["status"] == "error":
             return create_error_response(result["message"], result["error"])
-        elif result["status"] == "partial":
+        
+        # 如果有结果，保存大限数据到数据库
+        if result["status"] == "ok" or result["status"] == "partial":
+            try:
+                horoscope_data = result.get("horoscope", {})
+                
+                # 检查是否已存在相同的大限数据
+                existing_id = db_service.check_horoscope_data_exists(
+                    solar_date,
+                    time_index,
+                    gender,
+                    target_date,
+                    target_time_index
+                )
+                
+                if existing_id:
+                    # 数据已存在，更新并返回
+                    logger.info(f"大限数据已存在，ID: {existing_id}，将更新已有记录")
+                    try:
+                        db_service.update_horoscope_data(
+                            existing_id, 
+                            {
+                                'horoscope_data': horoscope_data
+                            }, 
+                            update_user="system"
+                        )
+                        logger.info(f"已更新现有大限数据，ID: {existing_id}")
+                    except Exception as update_err:
+                        logger.warning(f"更新现有大限数据失败: {str(update_err)}")
+                    
+                    # 在结果中添加数据库ID
+                    if isinstance(horoscope_data, dict):
+                        horoscope_data["db_id"] = existing_id
+                        result["horoscope"] = horoscope_data
+                else:
+                    # 如果不存在则正常保存
+                    try:
+                        new_id = db_service.save_horoscope_data(
+                            solar_date,
+                            time_index,
+                            gender,
+                            target_date,
+                            target_time_index,
+                            horoscope_data,
+                            "system"  # 默认创建用户为system
+                        )
+                        logger.info(f"大限数据已保存到数据库，ID: {new_id}")
+                        
+                        # 在结果中添加数据库ID
+                        if isinstance(horoscope_data, dict):
+                            horoscope_data["db_id"] = new_id
+                            result["horoscope"] = horoscope_data
+                    except Exception as e:
+                        logger.error(f"保存大限数据到数据库失败: {str(e)}")
+                        # 尝试从错误消息中提取可能的ID
+                        if "Duplicate entry" in str(e) and "uniq_data" in str(e):
+                            try:
+                                # 重新查询ID
+                                retry_id = db_service.check_horoscope_data_exists(
+                                    solar_date,
+                                    time_index,
+                                    gender,
+                                    target_date,
+                                    target_time_index
+                                )
+                                if retry_id:
+                                    logger.info(f"检测到重复数据，找到已存在的ID: {retry_id}")
+                                    if isinstance(horoscope_data, dict):
+                                        horoscope_data["db_id"] = retry_id
+                                        result["horoscope"] = horoscope_data
+                            except Exception:
+                                pass
+            except Exception as db_err:
+                logger.error(f"处理大限数据存储过程失败: {str(db_err)}")
+                # 即使保存失败，我们仍然返回大限数据
+        
+        # 返回结果
+        if result["status"] == "partial":
             return create_partial_response(
                 {"natal_chart": result["natal_chart"], "horoscope": result["horoscope"]},
                 result["message"],
@@ -285,7 +363,8 @@ def calculate_horoscope_get(
 @router.post("/horoscope")
 def calculate_horoscope_post(
     request: HoroscopeRequest,
-    astro_service: AstroService = Depends(get_astro_service)
+    astro_service: AstroService = Depends(get_astro_service),
+    db_service: DBService = Depends(get_db_service)
 ):
     """通过阳历获取大限流年信息"""
     try:
@@ -304,7 +383,84 @@ def calculate_horoscope_post(
 
         if result["status"] == "error":
             return create_error_response(result["message"], result["error"])
-        elif result["status"] == "partial":
+        
+        # 如果有结果，保存大限数据到数据库
+        if result["status"] == "ok" or result["status"] == "partial":
+            try:
+                horoscope_data = result.get("horoscope", {})
+                
+                # 检查是否已存在相同的大限数据
+                existing_id = db_service.check_horoscope_data_exists(
+                    request.solar_date,
+                    request.time_index,
+                    request.gender,
+                    request.target_date,
+                    request.target_time_index
+                )
+                
+                if existing_id:
+                    # 数据已存在，更新并返回
+                    logger.info(f"大限数据已存在，ID: {existing_id}，将更新已有记录")
+                    try:
+                        db_service.update_horoscope_data(
+                            existing_id, 
+                            {
+                                'horoscope_data': horoscope_data
+                            }, 
+                            update_user="system"
+                        )
+                        logger.info(f"已更新现有大限数据，ID: {existing_id}")
+                    except Exception as update_err:
+                        logger.warning(f"更新现有大限数据失败: {str(update_err)}")
+                    
+                    # 在结果中添加数据库ID
+                    if isinstance(horoscope_data, dict):
+                        horoscope_data["db_id"] = existing_id
+                        result["horoscope"] = horoscope_data
+                else:
+                    # 如果不存在则正常保存
+                    try:
+                        new_id = db_service.save_horoscope_data(
+                            request.solar_date,
+                            request.time_index,
+                            request.gender,
+                            request.target_date,
+                            request.target_time_index,
+                            horoscope_data,
+                            "system"  # 默认创建用户为system
+                        )
+                        logger.info(f"大限数据已保存到数据库，ID: {new_id}")
+                        
+                        # 在结果中添加数据库ID
+                        if isinstance(horoscope_data, dict):
+                            horoscope_data["db_id"] = new_id
+                            result["horoscope"] = horoscope_data
+                    except Exception as e:
+                        logger.error(f"保存大限数据到数据库失败: {str(e)}")
+                        # 尝试从错误消息中提取可能的ID
+                        if "Duplicate entry" in str(e) and "uniq_data" in str(e):
+                            try:
+                                # 重新查询ID
+                                retry_id = db_service.check_horoscope_data_exists(
+                                    request.solar_date,
+                                    request.time_index,
+                                    request.gender,
+                                    request.target_date,
+                                    request.target_time_index
+                                )
+                                if retry_id:
+                                    logger.info(f"检测到重复数据，找到已存在的ID: {retry_id}")
+                                    if isinstance(horoscope_data, dict):
+                                        horoscope_data["db_id"] = retry_id
+                                        result["horoscope"] = horoscope_data
+                            except Exception:
+                                pass
+            except Exception as db_err:
+                logger.error(f"处理大限数据存储过程失败: {str(db_err)}")
+                # 即使保存失败，我们仍然返回大限数据
+        
+        # 返回结果
+        if result["status"] == "partial":
             return create_partial_response(
                 {"natal_chart": result["natal_chart"], "horoscope": result["horoscope"]},
                 result["message"],
